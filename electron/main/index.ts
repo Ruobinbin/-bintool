@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell, ipcMain, globalShortcut } from 'electron'
 import { release } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promises } from 'node:fs'
 
 globalThis.__filename = fileURLToPath(import.meta.url)
 globalThis.__dirname = dirname(__filename)
@@ -40,22 +41,11 @@ if (!app.requestSingleInstanceLock()) {
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 let win: BrowserWindow | null = null
-let novelWin: BrowserWindow | null = null
+const otherWin: { [key: string]: BrowserWindow | null } = {
+  novel: null,
+};
 // 这里，你也可以使用其他的预加载脚本
 const preload = join(__dirname, '../preload/index.mjs')
-
-//创建小说窗口
-async function createNoverWin() {
-  novelWin = new BrowserWindow({
-    title: 'Novel window',
-    // parent: win,
-    webPreferences: {
-      preload,
-    },
-  })
-
-  loadPage(novelWin,"src/novel/novel.html")
-}
 
 //创建主窗口方法
 async function createWindow() {
@@ -88,11 +78,34 @@ async function createWindow() {
   win.webContents.openDevTools()
 
   loadPage(win,"index.html")
+
+  //关闭主窗口时 关闭其他窗口
+  win.on('close', () => {
+    for (const key in otherWin) {
+      const window = otherWin[key];
+      if (window && !window.isDestroyed()) {
+        window.close();
+        otherWin[key] = null;
+      }
+    }
+  });
+}
+
+//创建小说窗口
+async function createNoverWin() {
+  otherWin.novel = new BrowserWindow({
+    title: 'Novel window',
+    // parent: win,
+    webPreferences: {
+      preload,
+    },
+  })
+
+  loadPage(otherWin.novel,"src/novel/novel.html")
 }
 
 // 当应用准备好时，创建窗口
 app.whenReady().then(createWindow)
-
 
 // 当所有窗口都关闭时
 app.on('window-all-closed', () => {
@@ -139,3 +152,14 @@ function loadPage(win: BrowserWindow, src: string) {
 ipcMain.on('open-novel-win', () => {
   createNoverWin()
 });
+
+ipcMain.handle('writeToFile', async (_, arg) => {
+  const filePath = join(process.env.VITE_PUBLIC, arg.filePath)
+  try {
+      await promises.writeFile(filePath, arg.content)
+      return `写入到${filePath}成功`
+  } catch (err) {
+      console.error('Error writing file:', err)
+      return `写入到${filePath}失败`
+  }
+})
