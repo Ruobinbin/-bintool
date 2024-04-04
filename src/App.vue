@@ -9,10 +9,30 @@ window.ipcRenderer.on('win-show', () => {
 })
 const inputValue = ref('');
 
+//按下回车后触发
+const onEnter = () => {
+  switch (inputValue.value) {
+    case '/dm':
+      console.log('Option 1 selected');
+      break;
+    case '/dg':
+      console.log('Option 2 selected');
+      break;
+    case '/xs':
+      console.log('Option 2 selected');
+      window.ipcRenderer.send('open-novel-win', 'src/novel/novel.html');
+      break;
+    default:
+      console.log('Other option selected');
+  }
+}
+
+
+
 </script>
 
 <template>
-  <input ref="inputElement" v-model="inputValue" class="input-field" placeholder="请输入内容" />
+  <input @keyup.enter="onEnter" ref="inputElement" v-model="inputValue" class="input-field" placeholder="请输入内容" />
 </template>
 
 <style>

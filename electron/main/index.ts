@@ -28,7 +28,7 @@ if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 // 为 Windows 10+ 的通知设置应用程序名称
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 
-// 如果应用程序不是单实例的，则退出
+// 如果应用程序不是单实例的，则退出 //确保只有一个应用在启动着
 if (!app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
@@ -37,14 +37,27 @@ if (!app.requestSingleInstanceLock()) {
 // 移除 Electron 的安全警告
 // 这个警告只在开发模式下显示
 // 在 https://www.electronjs.org/docs/latest/tutorial/security 上阅读更多内容
-// process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 let win: BrowserWindow | null = null
+let novelWin: BrowserWindow | null = null
 // 这里，你也可以使用其他的预加载脚本
 const preload = join(__dirname, '../preload/index.mjs')
-const url = process.env.VITE_DEV_SERVER_URL
-const indexHtml = join(process.env.DIST, 'index.html')
 
+//创建小说窗口
+async function createNoverWin() {
+  novelWin = new BrowserWindow({
+    title: 'Novel window',
+    // parent: win,
+    webPreferences: {
+      preload,
+    },
+  })
+
+  loadPage(novelWin,"src/novel/novel.html")
+}
+
+//创建主窗口方法
 async function createWindow() {
   win = new BrowserWindow({
     title: 'Main window',
@@ -52,10 +65,9 @@ async function createWindow() {
       preload,
     },
     height: 100,
-    resizable: false, // 禁止调整窗口大小
-    transparent: true, // 设置窗口为透明
-    frame: false, // 移除窗口边框
-    skipTaskbar: true, // 隐藏任务栏
+    // resizable: false, // 禁止调整窗口大小
+    // transparent: true, // 设置窗口为透明
+    // frame: false, // 移除窗口边框
   })
 
   // 注册快捷键 Alt+A，如果窗口已经显示，则最小化窗口，否则显示窗口
@@ -73,28 +85,14 @@ async function createWindow() {
     win.minimize()
   })
 
-  if (process.env.VITE_DEV_SERVER_URL) { // electron-vite-vue#298
-    win.loadURL(url)
-    // win.webContents.openDevTools()
-  } else {
-    win.loadFile(indexHtml)
-  }
+  win.webContents.openDevTools()
 
-  // 主动向 Electron-Renderer 推送消息进行测试
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', new Date().toLocaleString())
-  })
-
-  // 使所有链接都用浏览器打开，而不是应用程序
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https:')) shell.openExternal(url)
-    return { action: 'deny' }
-  })
-  // win.webContents.on('will-navigate', (event, url) => { }) #344
+  loadPage(win,"index.html")
 }
 
 // 当应用准备好时，创建窗口
 app.whenReady().then(createWindow)
+
 
 // 当所有窗口都关闭时
 app.on('window-all-closed', () => {
@@ -120,18 +118,24 @@ app.on('activate', () => {
   }
 })
 
-// 打开新窗口的示例参数：新窗口的 URL
-ipcMain.handle('open-win', (_, arg) => {
-  console.log('[Open new window]:', arg)
-  const childWindow = new BrowserWindow({
-    webPreferences: {
-      preload,
-    },
-  })
+// 使所有链接都用浏览器打开，而不是应用程序
+function handleWindowOpen(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:')) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+}
 
+// 根据环境加载页面
+function loadPage(win: BrowserWindow, src: string) {
   if (process.env.VITE_DEV_SERVER_URL) {
-    childWindow.loadURL(`${url}#${arg}`)
+    win.loadURL(`${process.env.VITE_DEV_SERVER_URL}${src}`);
   } else {
-    childWindow.loadFile(indexHtml, { hash: arg })
+    win.loadFile(join(process.env.DIST,src));
   }
-})
+}
+
+//-------------------------------------------------------------------------------处理事件
+ipcMain.on('open-novel-win', () => {
+  createNoverWin()
+});

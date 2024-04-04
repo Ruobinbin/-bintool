@@ -1,12 +1,6 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 
-import './demos/ipc'
-// If you want use Node.js, the`nodeIntegration` needs to be enabled in the Main process.
-// import './demos/node'
+// 如果你想使用 Node.js，那么需要在主进程中启用 nodeIntegration。
 
-createApp(App)
-  .mount('#app')
-  .$nextTick(() => {
-    postMessage({ payload: 'removeLoading' }, '*')
-  })
+createApp(App).mount('#app')
