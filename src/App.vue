@@ -1,13 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
 let inputElement = ref<HTMLInputElement | null>(null);
+const inputValue = ref('');
+
 window.ipcRenderer.on('win-show', () => {
   if (inputElement.value) {
     inputElement.value.select();
   }
 })
-const inputValue = ref('');
+
+onMounted(() => {
+  if (inputElement.value) {
+    inputElement.value.focus();
+  }
+});
+
+
 
 //按下回车后触发
 const onEnter = () => {
@@ -45,5 +54,9 @@ const onEnter = () => {
   box-shadow: 0 0 15px 4px rgba(0, 0, 0, 0.06);
   margin: auto;
   display: block;
+}
+
+.input-field:focus {
+  outline: none;
 }
 </style>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, globalShortcut } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, globalShortcut, dialog } from 'electron'
 import { release } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +22,7 @@ process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
 process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
   ? join(process.env.DIST_ELECTRON, '../public')
   : process.env.DIST
+console.log('process.env.VITE_PUBLIC:', process.env.VITE_PUBLIC)
 
 // 如果用户正在运行 Windows 7，禁用 GPU 加速
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -47,6 +48,11 @@ const otherWin: { [key: string]: BrowserWindow | null } = {
 // 这里，你也可以使用其他的预加载脚本
 const preload = join(__dirname, '../preload/index.mjs')
 
+//要在渲染进程使用nodejs模块就
+// 注释 preload,
+// nodeIntegration: true,
+// contextIsolation: false,
+
 //创建主窗口方法
 async function createWindow() {
   win = new BrowserWindow({
@@ -55,9 +61,9 @@ async function createWindow() {
       preload,
     },
     height: 100,
-    // resizable: false, // 禁止调整窗口大小
-    // transparent: true, // 设置窗口为透明
-    // frame: false, // 移除窗口边框
+    resizable: false, // 禁止调整窗口大小
+    transparent: true, // 设置窗口为透明
+    frame: false, // 移除窗口边框
   })
 
   // 注册快捷键 Alt+A，如果窗口已经显示，则最小化窗口，否则显示窗口
@@ -75,9 +81,9 @@ async function createWindow() {
     win.minimize()
   })
 
-  win.webContents.openDevTools()
+  // win.webContents.openDevTools()
 
-  loadPage(win,"index.html")
+  loadPage(win, "index.html")
 
   //关闭主窗口时 关闭其他窗口
   win.on('close', () => {
@@ -95,13 +101,18 @@ async function createWindow() {
 async function createNoverWin() {
   otherWin.novel = new BrowserWindow({
     title: 'Novel window',
+    width: 1200,
     // parent: win,
     webPreferences: {
-      preload,
+      // preload,
+      nodeIntegration: true,
+      contextIsolation: false,
+      webSecurity: false,
     },
   })
 
-  loadPage(otherWin.novel,"src/novel/novel.html")
+  otherWin.novel.webContents.openDevTools()
+  loadPage(otherWin.novel, "src/novel/novel.html")
 }
 
 // 当应用准备好时，创建窗口
@@ -144,7 +155,7 @@ function loadPage(win: BrowserWindow, src: string) {
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(`${process.env.VITE_DEV_SERVER_URL}${src}`);
   } else {
-    win.loadFile(join(process.env.DIST,src));
+    win.loadFile(join(process.env.DIST, src));
   }
 }
 
@@ -156,10 +167,24 @@ ipcMain.on('open-novel-win', () => {
 ipcMain.handle('writeToFile', async (_, arg) => {
   const filePath = join(process.env.VITE_PUBLIC, arg.filePath)
   try {
-      await promises.writeFile(filePath, arg.content)
-      return `写入到${filePath}成功`
+    await promises.writeFile(filePath, arg.content)
+    return `写入到${filePath}成功`
   } catch (err) {
-      console.error('Error writing file:', err)
-      return `写入到${filePath}失败`
+    console.error('Error writing file:', err)
+    return `写入到${filePath}失败`
   }
 })
+
+ipcMain.handle('open-file-dialog', async (event, directory) => {
+  const result = await dialog.showOpenDialog({
+      defaultPath: directory,
+      properties: ['openFile']
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+      return result.filePaths[0];
+  }
+});
+
+ipcMain.handle('get-public-path', async () => {
+  return process.env.VITE_PUBLIC
+});

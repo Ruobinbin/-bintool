@@ -4,16 +4,20 @@ services:
     image: breakstring/gpt-sovits:latest
     ports:
       - "9880:9880"
+      - "9871:9871"
+      - "9872:9872"
+      - "9873:9873"
+      - "9874:9874"
     volumes:
-      - ./model:/model
+      - ./model:/workspace/model
     command: >
       python api.py 
-      -dr "/model/paimeng/参考音频/说话—既然罗莎莉亚说足迹上有元素力，用元素视野应该能很清楚地看到吧。.wav" 
-      -dt "名既然罗莎莉亚说足迹上有元素力，用元素视野应该能很清楚地看到吧。" 
+      -dr "model/kll/参考音频/娜塔莎姐姐说克拉拉也是医生呢，是机器伙伴的医生。.wav" 
+      -dt "娜塔莎姐姐说克拉拉也是医生呢，是机器伙伴的医生。" 
       -dl "zh" 
       -d "cuda" 
-      -s /model/paimeng/paimeng2_e110_s159940.pth
-      -g /model/paimeng/paimeng2-e100.ckpt
+      -s model/kll/克拉拉_e15_s1050.pth
+      -g model/kll/克拉拉-e10.ckpt
     deploy:
       resources:
         reservations:

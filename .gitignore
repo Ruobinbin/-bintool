@@ -31,3 +31,5 @@ yarn.lock
 
 #docker
 public/docker_services/gpt-sovits/model/*
+
+public/output/*
