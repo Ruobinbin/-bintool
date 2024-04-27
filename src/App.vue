@@ -4,19 +4,18 @@ import { onMounted, ref } from 'vue';
 let inputElement = ref<HTMLInputElement | null>(null);
 const inputValue = ref('');
 
+//监听窗口显示事件 让输入框获取焦点
 window.ipcRenderer.on('win-show', () => {
   if (inputElement.value) {
     inputElement.value.select();
   }
 })
-
+//挂载后让输入框获取焦点
 onMounted(() => {
   if (inputElement.value) {
     inputElement.value.focus();
   }
 });
-
-
 
 //按下回车后触发
 const onEnter = () => {

@@ -12,16 +12,17 @@ services:
       - ./model:/workspace/model
     command: >
       python api.py 
-      -dr "model/kll/参考音频/娜塔莎姐姐说克拉拉也是医生呢，是机器伙伴的医生。.wav" 
-      -dt "娜塔莎姐姐说克拉拉也是医生呢，是机器伙伴的医生。" 
+      -dr "model/pm/既然罗莎莉亚说足迹上有元素力，用元素视野应该能很清楚地看到吧。.wav" 
+      -dt "既然罗莎莉亚说足迹上有元素力，用元素视野应该能很清楚地看到吧。" 
       -dl "zh" 
       -d "cuda" 
-      -s model/kll/克拉拉_e15_s1050.pth
-      -g model/kll/克拉拉-e10.ckpt
+      -s model/pm/派蒙-平静_e25_s11925.pth
+      -g model/pm/派蒙-平静-e10.ckpt
+    shm_size: 16G
     deploy:
       resources:
         reservations:
           devices:
           - driver: nvidia
-            count: 1
+            count: "all"
             capabilities: [gpu]

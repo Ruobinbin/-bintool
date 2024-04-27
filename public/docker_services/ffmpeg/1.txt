@@ -1,0 +1,37 @@
+version: '3'
+services:
+  ffmpeg:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    volumes:
+      - ../../output:/app
+    command:
+      [
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        "/app/videos.txt",
+        "-i",
+        "/app/audio.wav",
+        "-i",
+        "/app/bgm.wav",
+        "-filter_complex",
+        "[2:a]volume=0.07[bgm]; [1:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[a]",
+        "-map",
+        "0:v",
+        "-map",
+        "[a]",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-vf",
+        "scale=-1:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,subtitles=/app/output.srt:force_style='FontName=Noto Sans CJK SC,FontSize=25,PrimaryColour=&H00FFFF&,WrapStyle=0'",
+        "-shortest",
+        "/app/output.mp4"
+      ]

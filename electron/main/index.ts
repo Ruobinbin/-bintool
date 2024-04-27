@@ -2,7 +2,6 @@ import { app, BrowserWindow, shell, ipcMain, globalShortcut, dialog } from 'elec
 import { release } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { promises } from 'node:fs'
 
 globalThis.__filename = fileURLToPath(import.meta.url)
 globalThis.__dirname = dirname(__filename)
@@ -65,7 +64,6 @@ async function createWindow() {
     transparent: true, // 设置窗口为透明
     frame: false, // 移除窗口边框
   })
-
   // 注册快捷键 Alt+A，如果窗口已经显示，则最小化窗口，否则显示窗口
   globalShortcut.register('Alt+A', () => {
     if (win.isVisible()) {
@@ -75,7 +73,6 @@ async function createWindow() {
       win.webContents.send('win-show')
     }
   })
-
   // 当窗口失去焦点时，最小化窗口
   win.on('blur', () => {
     win.minimize()
@@ -96,7 +93,6 @@ async function createWindow() {
     }
   });
 }
-
 //创建小说窗口
 async function createNoverWin() {
   otherWin.novel = new BrowserWindow({
@@ -113,17 +109,19 @@ async function createNoverWin() {
 
   otherWin.novel.webContents.openDevTools()
   loadPage(otherWin.novel, "src/novel/novel.html")
+  //让所有链接都用浏览器打开
+  otherWin.novel.webContents.on('will-navigate', function (event, url) {
+    event.preventDefault();
+    shell.openExternal(url);
+  });
 }
-
 // 当应用准备好时，创建窗口
 app.whenReady().then(createWindow)
-
 // 当所有窗口都关闭时
 app.on('window-all-closed', () => {
   win = null
   if (process.platform !== 'darwin') app.quit()
 })
-
 // 如果用户尝试打开另一个窗口，将焦点放在主窗口上
 app.on('second-instance', () => {
   if (win) {
@@ -131,7 +129,6 @@ app.on('second-instance', () => {
     win.focus()
   }
 })
-
 // 当应用被激活时
 app.on('activate', () => {
   const allWindows = BrowserWindow.getAllWindows()
@@ -141,7 +138,6 @@ app.on('activate', () => {
     createWindow()
   }
 })
-
 // 使所有链接都用浏览器打开，而不是应用程序
 function handleWindowOpen(win: BrowserWindow) {
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -149,7 +145,6 @@ function handleWindowOpen(win: BrowserWindow) {
     return { action: 'deny' };
   });
 }
-
 // 根据环境加载页面
 function loadPage(win: BrowserWindow, src: string) {
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -160,31 +155,21 @@ function loadPage(win: BrowserWindow, src: string) {
 }
 
 //-------------------------------------------------------------------------------处理事件
+//打开小说窗口
 ipcMain.on('open-novel-win', () => {
   createNoverWin()
 });
-
-ipcMain.handle('writeToFile', async (_, arg) => {
-  const filePath = join(process.env.VITE_PUBLIC, arg.filePath)
-  try {
-    await promises.writeFile(filePath, arg.content)
-    return `写入到${filePath}成功`
-  } catch (err) {
-    console.error('Error writing file:', err)
-    return `写入到${filePath}失败`
-  }
-})
-
+//打开文件对话框
 ipcMain.handle('open-file-dialog', async (event, directory) => {
   const result = await dialog.showOpenDialog({
-      defaultPath: directory,
-      properties: ['openFile']
+    defaultPath: directory,
+    properties: ['openFile']
   });
   if (!result.canceled && result.filePaths.length > 0) {
-      return result.filePaths[0];
+    return result.filePaths[0];
   }
 });
-
+//获取public路径
 ipcMain.handle('get-public-path', async () => {
   return process.env.VITE_PUBLIC
 });

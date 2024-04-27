@@ -3,10 +3,7 @@ services:
   yt-dlp:
     image: jauderho/yt-dlp
     volumes:
-      - ../../novel/output:/app
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["yt-dlp", "--no-playlist", "-f", "bestvideo[ext=mp4]/best[ext=mp4]", "-o", "/app/video-%(upload_date)s.%(ext)s", "$VIDEO_URL"]
+      - ../../output:/app
     environment:
       - HTTP_PROXY=http://host.docker.internal:7890
       - HTTPS_PROXY=http://host.docker.internal:7890
-      - VIDEO_URL=https://www.youtube.com/watch?v=YHU0aM9rCFA
