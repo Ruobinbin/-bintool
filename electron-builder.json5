@@ -11,8 +11,9 @@
   },
   "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
   ],
+  "icon": "public/app-icon",
   "mac": {
     "target": [
       "dmg"

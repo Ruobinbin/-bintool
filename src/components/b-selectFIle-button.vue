@@ -14,7 +14,7 @@ const emit = defineEmits(['update:modelValue']);
 const selectedFile = ref(props.modelValue);
 
 const select = async () => {
-    const result = await ipcRenderer.invoke('open-file-dialog', props.directory);
+    const result = await ipcRenderer.invoke('openFileDialog', props.directory);
     if (result) {
         selectedFile.value = relative(join(props.directory || '', "../"), result);
         emit('update:modelValue', selectedFile.value);

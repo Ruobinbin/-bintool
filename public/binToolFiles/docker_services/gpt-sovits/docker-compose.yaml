@@ -12,12 +12,12 @@ services:
       - ./model:/workspace/model
     command: >
       python api.py 
-      -dr "model/pm/既然罗莎莉亚说足迹上有元素力，用元素视野应该能很清楚地看到吧。.wav" 
-      -dt "既然罗莎莉亚说足迹上有元素力，用元素视野应该能很清楚地看到吧。" 
+      -dr "model/syq/我整理完今天的照片就休息了，你也别熬夜打游戏哦。.wav" 
+      -dt "我整理完今天的照片就休息了，你也别熬夜打游戏哦。" 
       -dl "zh" 
       -d "cuda" 
-      -s model/pm/派蒙-平静_e25_s11925.pth
-      -g model/pm/派蒙-平静-e10.ckpt
+      -s model/syq/sanyueqi_e15_s180.pth
+      -g model/syq/sanyueqi-e15.ckpt
     shm_size: 16G
     deploy:
       resources:

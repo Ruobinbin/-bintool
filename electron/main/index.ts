@@ -1,30 +1,21 @@
 import { app, BrowserWindow, shell, ipcMain, globalShortcut, dialog } from 'electron'
-import { release } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import fs from 'fs'
+import fse from 'fs-extra'
+import sqlite3 from 'sqlite3';
+import { Novel } from '../../src/interfaces/novel';
 
 globalThis.__filename = fileURLToPath(import.meta.url)
 globalThis.__dirname = dirname(__filename)
 
-// 构建的目录结构
-//
-// ├─┬ dist-electron
-// │ ├─┬ main
-// │ │ └── index.js    > Electron-Main
-// │ └─┬ preload
-// │   └── index.mjs    > 预加载脚本
-// ├─┬ dist
-// │ └── index.html    > Electron-Renderer
-//
 process.env.DIST_ELECTRON = join(__dirname, '..')
+console.log('process.env.DIST_ELECTRON:', process.env.DIST_ELECTRON)
 process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
 process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
   ? join(process.env.DIST_ELECTRON, '../public')
   : process.env.DIST
-console.log('process.env.VITE_PUBLIC:', process.env.VITE_PUBLIC)
-
-// 如果用户正在运行 Windows 7，禁用 GPU 加速
-if (release().startsWith('6.1')) app.disableHardwareAcceleration()
+let binToolFilesPath = ""
 
 // 为 Windows 10+ 的通知设置应用程序名称
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
@@ -70,7 +61,7 @@ async function createWindow() {
       win.minimize()
     } else {
       win.show()
-      win.webContents.send('win-show')
+      win.webContents.send('winShow')
     }
   })
   // 当窗口失去焦点时，最小化窗口
@@ -116,7 +107,17 @@ async function createNoverWin() {
   });
 }
 // 当应用准备好时，创建窗口
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  // 创建用户文件夹
+  const userDataPath = app.getPath('userData')
+  binToolFilesPath = join(userDataPath, 'binToolFiles')
+  if (!fs.existsSync(binToolFilesPath)) {
+    const sourcePath = join(process.env.VITE_PUBLIC, 'binToolFiles')
+    fse.copySync(sourcePath, binToolFilesPath)
+  }
+
+  createWindow()
+})
 // 当所有窗口都关闭时
 app.on('window-all-closed', () => {
   win = null
@@ -153,14 +154,13 @@ function loadPage(win: BrowserWindow, src: string) {
     win.loadFile(join(process.env.DIST, src));
   }
 }
-
-//-------------------------------------------------------------------------------处理事件
+//处理事件----------------------------------------------------------------------------------------------------
 //打开小说窗口
-ipcMain.on('open-novel-win', () => {
+ipcMain.on('openNovelWin', () => {
   createNoverWin()
 });
 //打开文件对话框
-ipcMain.handle('open-file-dialog', async (event, directory) => {
+ipcMain.handle('openFileDialog', async (event, directory) => {
   const result = await dialog.showOpenDialog({
     defaultPath: directory,
     properties: ['openFile']
@@ -170,6 +170,80 @@ ipcMain.handle('open-file-dialog', async (event, directory) => {
   }
 });
 //获取public路径
-ipcMain.handle('get-public-path', async () => {
-  return process.env.VITE_PUBLIC
+ipcMain.handle('getBinToolFilesPath', async () => {
+  return binToolFilesPath
+});
+//数据库----------------------------------------------------------------------------------------------------
+let db = new sqlite3.Database('./mydb.sqlite3');
+// novel数据库--------------------------------------------------
+db.run(`CREATE TABLE IF NOT EXISTS novel (
+  id INTEGER PRIMARY KEY,
+  content TEXT,
+  audioSrc TEXT,
+  audioDuration REAL
+)`);
+
+ipcMain.handle('insertNovel', async (event, novel: Novel) => {
+  return new Promise<void>((resolve, reject) => {
+    const { content, audioSrc, audioDuration } = novel;
+    
+    db.run(`INSERT INTO novel (content, audioSrc, audioDuration) VALUES (?, ?, ?)`, [content, audioSrc, audioDuration], function(err) {
+      if (err) {
+        reject(new Error(`插入小说数据失败: ${err.message}`));
+      } else {
+        resolve();
+      }
+    });
+  });
+});
+
+ipcMain.handle('deleteNovel', async (event, id) => {
+  db.run(`DELETE FROM novel WHERE id = ?`, [id]);
+});
+
+ipcMain.handle('updateNovelAudioDuration', async (event, id, audioDuration) => {
+  db.run(`UPDATE novel SET audioDuration = ? WHERE id = ?`, [audioDuration, id]);
+});
+
+ipcMain.handle('updateNovelAudioSrc', async (event, id, audioSrc) => {
+  db.run(`UPDATE novel SET audioSrc = ? WHERE id = ?`, [audioSrc, id]);
+});
+
+ipcMain.handle('updateNovelContent', async (event, id, content) => {
+  db.run(`UPDATE novel SET content = ? WHERE id = ?`, [content, id]);
+});
+
+ipcMain.handle('selectAllNovels', async (event) => {
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT * FROM novel`, [], (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(rows);
+      }
+    });
+  });
+});
+
+ipcMain.handle('selectNovelById', async (event, id) => {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT * FROM novel WHERE id = ?`, [id], (err, row) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row);
+      }
+    });
+  });
+});
+
+ipcMain.handle('deleteAllNovels', async () => {
+  db.run(`DELETE FROM novel`);
+});
+
+ipcMain.handle('truncateNovelTable', async (event) => {
+  // 删除表内容
+  db.run(`DELETE FROM novel`);
+  // 收回未使用的磁盘空间
+  db.run(`VACUUM`);
 });

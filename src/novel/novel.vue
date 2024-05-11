@@ -1,29 +1,36 @@
 <script setup lang="ts">
-import consoleLogClear from "../components/b-consoleLogClear-button.vue"
-import downYoutubeVideo from "./b-downYoutubeVido.vue"
 import selectFIle from "../components/b-selectFIle-button.vue"
 
 import { join } from 'node:path'
-import { computed, inject, ref, watch } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 import { spawn, exec } from 'child_process';
 import axios from 'axios';
 import fs from 'fs';
+import { ipcRenderer } from "electron";
+import { VueDraggable } from 'vue-draggable-plus'
+import { Novel } from "../interfaces/novel";
 
-const publicPath = inject('publicPath') as string; //public的路径
-const outputPath = join(publicPath, 'output');
+onMounted(async () => {
+    userFilesPath.value = await ipcRenderer.invoke('getBinToolFilesPath')
+    checkAndOpenDocker();
+    fetchNovels();
+})
 
-const gptsovitsModelPath = join(publicPath, 'docker_services/gpt-sovits/model');
-const gptsovitsDockerComposePath = join(publicPath, 'docker_services/gpt-sovits/docker-compose.yaml');
-const aeneasDockerComposePath = join(publicPath, 'docker_services/aeneas/docker-compose.yaml');
-const ytdlpDockerComposePath = join(publicPath, 'docker_services/ytdlp/docker-compose.yaml');
-const ffmpegDockerComposePath = join(publicPath, 'docker_services/ffmpeg/docker-compose.yaml');
+const userFilesPath = ref('')
+const outputPath = computed(() => join(userFilesPath.value, 'output'))
+const gptsovitsModelPath = computed(() => join(userFilesPath.value, 'docker_services/gpt-sovits/model'))
+const gptsovitsDockerComposePath = computed(() => join(userFilesPath.value, 'docker_services/gpt-sovits/docker-compose.yaml'))
+const aeneasDockerComposePath = computed(() => join(userFilesPath.value, 'docker_services/aeneas/docker-compose.yaml'))
+const ytdlpDockerComposePath = computed(() => join(userFilesPath.value, 'docker_services/ytdlp/docker-compose.yaml'))
+const ffmpegDockerComposePath = computed(() => join(userFilesPath.value, 'docker_services/ffmpeg/docker-compose.yaml'))
 
 const gptSoVItsApi = "http://127.0.0.1:9880/"; //gpt-sovits的api访问地址
 const YOUTUBE_DATA_API_KEY = 'AIzaSyBkPEp-9_9T4PBwAYKks1A4-xoBlJs4n8s';
 
-let novelTextarea = ref(''); //小说内容
-let contents = ref<{ content: string, audioSrc: string, audioDuration: number }[]>([]);
-let audioTotaDuration = computed(() => contents.value.reduce((total, novel) => total + novel.audioDuration, 0));
+const novels = ref<Novel[]>([]);
+let novelContentInput = ref(''); //小说内容插入框
+let fqNovelBookIdInput = ref(''); //番茄小说内容
+let audioTotaDuration = computed(() => novels.value.reduce((total, novel) => total + novel.audioDuration, 0)); //总音频长度
 
 let youtubeUrl = ref('https://www.youtube.com/@HydraulicPressChannel'); //默认博主主页
 let videoTotalDuration = ref(0); //视频总长度
@@ -31,11 +38,25 @@ let randomVideoCount = ref(50); //随机视频数量
 let channelId = ref('UCcMDMoNu66_1Hwi5-MeiQgw'); //默认的博主id
 let videoIds = ref([]); // 视频 URL 列表
 let selectedVideos = ref<{ url: string, duration: number, id: string }[]>([]); // 已选视频列表
-let inputValue = ref('');
+let bgminput = ref('');
+
+
 
 let gptFile = ref(''); //gpt模型文件路径
 let vitsFile = ref(''); //vits模型文件路径
 let promptAudio = ref(''); //参考音频路径
+
+
+
+const fetchNovels = async () => {
+    novels.value = await ipcRenderer.invoke('selectAllNovels');
+};
+
+
+const deleteNovel = async (id: number) => {
+    await ipcRenderer.invoke('deleteNovel', id);
+    await fetchNovels();
+};
 
 //修改参考音频
 watch(promptAudio, async (newValue) => {
@@ -50,30 +71,6 @@ watch(promptAudio, async (newValue) => {
         console.error(`修改参考音频失败 ${response.status}`);
     }
 });
-watch(novelTextarea, async (newValue) => {
-    novelTextarea.value = newValue.replace(/<p>(.*?)<\/p>/g, (match, p1) => `${p1}\n`);
-});
-//初始化contents
-const initContents = async () => {
-    const files = await fs.promises.readdir(outputPath);
-    for (let i = 0; i < files.length; i++) {
-        if (files[i].startsWith('audio-')) {
-            const audioSrc = join(outputPath, files[i]);
-            let content = '暂无';
-            try {
-                const index = files[i].split('-')[1].split('.')[0]; // 获取文件名中的索引
-                content = await fs.promises.readFile(join(outputPath, `content-${index}.txt`), 'utf-8'); // 读取对应的txt文件的内容
-            } catch (err) {
-                console.error('Error while reading file', err);
-            }
-            contents.value.push({
-                content: content,
-                audioSrc: audioSrc,
-                audioDuration: 0
-            });
-        }
-    }
-};
 //检查docker是否运行，如果没有运行则启动
 const checkAndOpenDocker = () => {
     exec('docker info', (error, stdout, stderr) => {
@@ -91,44 +88,13 @@ const checkAndOpenDocker = () => {
         }
     });
 };
-//添加小说id输入框
-const addNovelInput = () => {
-    contents.value.push({
-        content: '暂无',
-        audioSrc: "",
-        audioDuration: 0
-    });
-}
-//删除小说id输入框
-const rmNovle = (index: number) => {
-    if (contents.value[index].audioSrc === '') {
-        contents.value.splice(index, 1);
-        return;
-    }
-    let audioSrc = contents.value[index].audioSrc.split('?')[0]; // 获取问号之前的部分
-    try {
-        fs.unlinkSync(audioSrc);
-        fs.unlinkSync(audioSrc.replace('audio', 'content').replace('wav', 'txt'));
-        console.log(`${audioSrc} deleted successfully`);
-    } catch (err) {
-        console.error('Error while deleting file', err);
-    }
-    contents.value.splice(index, 1);
-}
-//设置contents的内容
-const addNovelToContents = () => {
-    const lines = novelTextarea.value.split('\n');
-    lines.forEach(content => {
-        contents.value.push({ content, audioSrc: '', audioDuration: 0 });
-    });
-}
 //开启gptsovits
 const startGptsovitsDocker = () => {
-    runDocker('gptsovits', gptsovitsDockerComposePath, ['up'], 'gptsovits已启动');
+    runDocker('gptsovits', gptsovitsDockerComposePath.value, ['up'], 'gptsovits已启动');
 };
 //关闭gptsovits
 const stopGptsovitsDocker = () => {
-    runDocker('gptsovits', gptsovitsDockerComposePath, ['stop'], 'gptsovits已关闭');
+    runDocker('gptsovits', gptsovitsDockerComposePath.value, ['stop'], 'gptsovits已关闭');
 };
 //设置模型
 const setModel = async () => {
@@ -140,9 +106,10 @@ const setModel = async () => {
     });
 };
 //单独生成语音
-const generateAudioByIndex = async (index: number) => {
+const generateAudioByIndex = async (id: number) => {
     //去除“”去除空行
-    let text = contents.value[index].content.replace(/^\s*[\r\n]/gm, '');
+    let novel = await ipcRenderer.invoke('selectNovelById', id, 0);
+    let text = novel.content.replace(/^\s*[\r\n]/gm, '');
     let response = await fetch(gptSoVItsApi, {
         method: 'POST',
         headers: {
@@ -156,46 +123,45 @@ const generateAudioByIndex = async (index: number) => {
     if (response.status === 200) {
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        await fs.promises.writeFile(join(outputPath, `audio-${index}.wav`), buffer);
-        await fs.promises.writeFile(join(outputPath, `content-${index}.txt`), text);
-        contents.value[index].audioSrc = join(outputPath, `audio-${index}.wav?${Date.now()}`)
+        let audioSrc = join(outputPath.value, `audio-${Date.now()}.wav`);
+        await fs.promises.writeFile(audioSrc, buffer);
+        await ipcRenderer.invoke('updateNovelAudioSrc', id, audioSrc);
+        await fetchNovels();
     } else {
         console.error('请求失败，状态码：', response.status);
     }
 }
 //一键生成语音
 const generateAudio = async () => {
-    if (contents.value.length === 0) {
-        alert('请添加小说');
-        return;
-    }
-    for await (let [index, content] of contents.value.entries()) {
-        if (content.audioSrc !== '') {
-            continue;
+    for (let novel of novels.value) {
+        if (novel.audioSrc === '') {
+            console.log(`正在生成语音：${novel.content}`);
+            await generateAudioByIndex(novel.id!);
         }
-        await generateAudioByIndex(index);
     }
 };
 //生成语音文件列表
 const generateAudioListTxt = async () => {
-    const audios = contents.value.map(content => {
+    const audios = novels.value.map(content => {
         let match = content.audioSrc.match(/audio-\d+\.wav/);
         return match ? `file ${match[0]}` : '';
     }).filter(audio => audio !== '').join('\n');
-    fs.writeFileSync(join(outputPath, 'audios.txt'), audios);
+    fs.writeFileSync(join(outputPath.value, 'audios.txt'), audios);
     console.log('成功写入文件：audios.txt');
 };
 //更新音频时长
-const setAudioDuration = (index: number, $event: Event) => {
-    contents.value[index].audioDuration = ($event.target as HTMLAudioElement).duration;
+const setAudioDuration = async (id: number, $event: Event) => {
+    const duration = ($event.target as HTMLAudioElement).duration;
+    await ipcRenderer.invoke('updateNovelAudioDuration', id, duration);
+    await fetchNovels();
 };
 //合成视频
 const generateVideo = async () => {
     await generateAudioListTxt(); //生成音频列表
     //去除标点符号，。,.“”去除空行
-    let txt = contents.value.map(item => item.content).join('\n').replace(/[,，.。]/g, "\n").replace(/“|”/g, '').replace(/^\s*[\r\n]/gm, '')
+    let txt = novels.value.map(item => item.content).join('\n').replace(/[,，.。]/g, "\n").replace(/“|”/g, '').replace(/^\s*[\r\n]/gm, '')
     try {
-        fs.writeFileSync(join(outputPath, 'text.txt'), txt);
+        fs.writeFileSync(join(outputPath.value, 'text.txt'), txt);
         console.log('已成功写入text.txt');
     } catch (err) {
         console.error('写入文件时text.txt发生错误:', err);
@@ -249,21 +215,9 @@ const generateVideo = async () => {
         audioTotaDuration.value.toString(),  // 替换为你的音频总时长
         "/app/output.mp4"
     ]
-    await runDocker('音频合成', ffmpegDockerComposePath, commandSynthesizeAudio, '音频合成完毕');
-    await runDocker('生成字幕', aeneasDockerComposePath, ['up'], '生成字幕完毕');
-    await runDocker('视频合成', ffmpegDockerComposePath, commandGenerateVideo, '视频合成完毕');
-};
-const playNext = (index: number) => {
-    if (index + 1 < contents.value.length) {
-        const nextDiv = document.querySelector(`div[data-index='${index + 1}']`) as HTMLDivElement;
-        if (nextDiv) {
-            const nextAudio = nextDiv.querySelector('audio') as HTMLAudioElement;
-            if (nextAudio) {
-                nextAudio.play();
-            }
-            nextDiv.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
+    await runDocker('音频合成', ffmpegDockerComposePath.value, commandSynthesizeAudio, '音频合成完毕');
+    await runDocker('生成字幕', aeneasDockerComposePath.value, ['up'], '生成字幕完毕');
+    await runDocker('视频合成', ffmpegDockerComposePath.value, commandGenerateVideo, '视频合成完毕');
 };
 //docker-compose通用方法
 const runDocker = async (dockerName: string, dockerComposePath: string, command: string[], msg: string): Promise<void> => {
@@ -290,8 +244,8 @@ const runDocker = async (dockerName: string, dockerComposePath: string, command:
         });
     });
 };
-
-const handleEnter = async () => {
+//切换youtube博主url
+const toggleYoutubeUrl = async () => {
     // 获取YouTube频道ID
     const response = await axios.get(youtubeUrl.value);
     const html = response.data;
@@ -388,9 +342,9 @@ const removeVideo = async (index: number) => {
 //下载视频
 const downloadVideos = async () => {
     // 删除 outputPath 下所有以 'video-' 开头的文件
-    fs.readdirSync(outputPath).forEach(file => {
+    fs.readdirSync(outputPath.value).forEach(file => {
         if (file.startsWith('video-')) {
-            fs.unlinkSync(join(outputPath, file));
+            fs.unlinkSync(join(outputPath.value, file));
             console.log(`成功删除文件：${file}`);
         }
     });
@@ -398,48 +352,104 @@ const downloadVideos = async () => {
     for (const video of selectedVideos.value) {
         console.log(`正在下载视频：${video.url}`);
         const command = ['run', '--rm', 'yt-dlp', '--no-playlist', '-f', 'bestvideo[ext=mp4]/best[ext=mp4]', '-o', '/app/video-%(id)s.%(ext)s', video.url];
-        await runDocker('下载背景音乐', ytdlpDockerComposePath, command, '背景音乐下载完毕');
+        await runDocker('下载背景音乐', ytdlpDockerComposePath.value, command, '背景音乐下载完毕');
     }
     console.log('所有视频都已经下载完成。');
 
     // 获取 outputPath 下所有以 'video-' 开头的文件，并写入到 'videos.txt'
-    const videos = fs.readdirSync(outputPath).filter(file => file.startsWith('video-')).map(file => `file ${file}`).join('\n');
-    fs.writeFileSync(join(outputPath, 'videos.txt'), videos);
+    const videos = fs.readdirSync(outputPath.value).filter(file => file.startsWith('video-')).map(file => `file ${file}`).join('\n');
+    fs.writeFileSync(join(outputPath.value, 'videos.txt'), videos);
     console.log('成功写入文件：videos.txt');
 };
 //下载背景音乐
 const onEnter = async () => {
-    const command = ['run', '--rm', 'yt-dlp', '-x', '--no-continue', '-o', `/app/bgm.wav`, inputValue.value];
-    await runDocker('下载背景音乐', ytdlpDockerComposePath, command, '背景音乐下载完毕');
+    const command = ['run', '--rm', 'yt-dlp', '-x', '--no-continue', '-o', `/app/bgm.wav`, bgminput.value];
+    await runDocker('下载背景音乐', ytdlpDockerComposePath.value, command, '背景音乐下载完毕');
+}
+//添加小说
+const addNovel = async () => {
+    const novelData: Novel = {
+        content: novelContentInput.value,
+        audioSrc: '',
+        audioDuration: 0
+    };
+    await ipcRenderer.invoke('insertNovel', novelData);
+    await fetchNovels();
+};
+
+const fetchfqNovelContent = async () => {
+    if (!fqNovelBookIdInput) {
+        return;
+    }
+
+    const response = await axios.get(`https://fqnovel.pages.dev/content?item_id=${fqNovelBookIdInput.value}`);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(response.data, 'text/html');
+    const paragraphs = Array.from(doc.getElementsByTagName('p'));
+    console.log(paragraphs);
+    for (const p of paragraphs) {
+        console.log(p.textContent);
+        const novelData: Novel = {
+            content: p.textContent!,
+            audioSrc: '',
+            audioDuration: 0
+        };
+        await ipcRenderer.invoke('insertNovel', novelData);
+    }
+    await fetchNovels();
 }
 
-checkAndOpenDocker();
-initContents();
+const truncateNovel = async () => {
+    await ipcRenderer.invoke('truncateNovelTable');
+    await fetchNovels();
+}
 
 </script>
 
 <template>
-    <consoleLogClear />
-    <div :style="{ backgroundColor: 'pink', border: '2px solid black' }">
-        <textarea v-model="novelTextarea" :style="{ width: '80%', height: '100px', display: 'block' }"></textarea>
-        <button @click="addNovelToContents()">确定</button>
+    <div :style="{ backgroundColor: 'pink' }">
+        <input v-model="fqNovelBookIdInput"></input>
+        <button @click="fetchfqNovelContent">确定</button>
     </div>
-    <div :style="{ backgroundColor: 'pink', border: '2px solid black' }">
-        <button @click="addNovelInput">添加</button>
-        <div :data-index="index" v-for="(content, index) in contents" :key="index" @contextmenu.prevent="rmNovle(index)"
-            :style="{ backgroundColor: 'gray', marginTop: '10px', borderRadius: '10px', border: '2px solid black' }">
-            <span>{{ index }}</span>
-            <textarea v-model="contents[index].content"
-                :style="{ width: '99%', height: '20px', display: 'block' }"></textarea>
-            <p>{{ content.audioSrc }}</p>
-            <audio @ended="playNext(index)" @loadedmetadata="setAudioDuration(index, $event)"
-                :src="contents[index].audioSrc" controls></audio>
-            <button @click="generateAudioByIndex(index)">生成语音</button>
-        </div>
-        <button @click="generateAudio">一键生成语音</button>
-    </div>
+    <VueDraggable v-model="novels" target=".sort-target" :animation="150">
+        <table>
+            <thead>
+                <tr>
+                    <th><textarea v-model="novelContentInput"></textarea></th>
+                    <th><button @click="addNovel">添加</button></th>
+                    <th><button @click="generateAudio">一键生成语音</button></th>
+                    <th><button @click="truncateNovel">清空表</button></th>
+                </tr>
+                <tr>
+                    <th>id</th>
+                    <th>内容</th>
+                    <th>音频源</th>
+                    <th>音频时长</th>
+                    <th>音频</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody class="sort-target">
+                <tr v-for="novel in novels" :key="novel.id" class="cursor-move">
+                    <td>{{ novel.id }}</td>
+                    <td>{{ novel.content }}</td>
+                    <td>{{ novel.audioSrc }}</td>
+                    <td>{{ novel.audioDuration }}</td>
+                    <td><audio @loadedmetadata="setAudioDuration(novel.id!, $event)" :src="novel.audioSrc"
+                            controls></audio></td>
+                    <td>
+                        <div style="display: flex;">
+                            <button @click="deleteNovel(novel.id!)">删除</button>
+                            <button @click="generateAudioByIndex(novel.id!)">生成语音</button>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </VueDraggable>
 
-    <div :style="{ backgroundColor: 'gray', border: '2px solid black' }">
+
+    <div :style="{ backgroundColor: 'gray' }">
         <div>
             <button @click="startGptsovitsDocker">开启gpt-sovits</button>
             <button @click="stopGptsovitsDocker">关闭gpt-sovits</button>
@@ -450,21 +460,22 @@ initContents();
         <selectFIle :buttonValue="'参考音频:'" :directory="gptsovitsModelPath" v-model="promptAudio" />
     </div>
 
-    <div :style="{ backgroundColor: 'gray', border: '2px solid black' }">
+    <div :style="{ backgroundColor: 'gray' }">
         <div class="info">
             <p>音频长度:{{ audioTotaDuration }}</p>
             <p>视频总长度:{{ videoTotalDuration }}</p>
             <p>选择的博主id:{{ channelId }}</p>
         </div>
         <div class="controls">
-            <p>选择博主视频主页:<input @keyup.enter="handleEnter" type="text" id="youtubeUrlInput" v-model="youtubeUrl"></p>
+            <p>选择博主视频主页:<input @keyup.enter="toggleYoutubeUrl" type="text" id="youtubeUrlInput" v-model="youtubeUrl">
+            </p>
             <p>选择随机视频数量:<input type="number" id="randomVideoCountInput" v-model="randomVideoCount"></p>
-            <p>请输入音频地址，按回车键下载:<input v-model="inputValue" @keyup.enter="onEnter"></input></p>
+            <p>请输入音频地址，按回车键下载:<input v-model="bgminput" @keyup.enter="onEnter"></input></p>
             <button @click="showVideo">展示视频</button>
             <button @click="downloadVideos">下载视频</button>
         </div>
-        <div class="video-list">
-            <a v-for="(video, index) in selectedVideos" :key="index" :href="video.url"
+        <div>
+            <a :style="{ display: 'block' }" v-for="(video, index) in selectedVideos" :key="index" :href="video.url"
                 @contextmenu.prevent="removeVideo(index)">{{ video.id }} (时长：{{ video.duration }})</a>
         </div>
     </div>
@@ -476,6 +487,7 @@ initContents();
 </template>
 
 <style scoped>
+/* 按钮样式 */
 button {
     display: inline-block;
     padding: 10px 20px;

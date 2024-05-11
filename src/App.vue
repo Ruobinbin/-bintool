@@ -5,7 +5,7 @@ let inputElement = ref<HTMLInputElement | null>(null);
 const inputValue = ref('');
 
 //监听窗口显示事件 让输入框获取焦点
-window.ipcRenderer.on('win-show', () => {
+window.ipcRenderer.on('winShow', () => {
   if (inputElement.value) {
     inputElement.value.select();
   }
@@ -28,7 +28,7 @@ const onEnter = () => {
       break;
     case '/xs':
       console.log('Option 2 selected');
-      window.ipcRenderer.send('open-novel-win', 'src/novel/novel.html');
+      window.ipcRenderer.send('openNovelWin');
       break;
     default:
       console.log('Other option selected');
