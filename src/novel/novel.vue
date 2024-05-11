@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import selectFIle from "../components/b-selectFIle-button.vue"
-
+import {ISO8601ToSeconds} from "@/utils/utils"
+import { Novel } from "@/interfaces/novel";
+import selectFIle from "@/components/b-selectFIle-button.vue"
+import { ElTabs, ElTabPane } from 'element-plus';
+import 'element-plus/dist/index.css';
 import { join } from 'node:path'
 import { computed, onMounted, ref, watch } from "vue"
 import { spawn, exec } from 'child_process';
@@ -8,7 +11,7 @@ import axios from 'axios';
 import fs from 'fs';
 import { ipcRenderer } from "electron";
 import { VueDraggable } from 'vue-draggable-plus'
-import { Novel } from "../interfaces/novel";
+
 
 onMounted(async () => {
     userFilesPath.value = await ipcRenderer.invoke('getBinToolFilesPath')
@@ -297,22 +300,9 @@ const getYoutubeVideoDuration = async (videoId: string) => {
         });
         const data = response.data;
         const duration = data.items[0].contentDetails.duration;
-        return durationToSeconds(duration);
+        return ISO8601ToSeconds(duration);
     } catch (error) {
         console.error('获取视频时长失败:', error)
-    }
-}
-//ISO 8601 转 秒
-const durationToSeconds = (duration: string) => {
-    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-    if (match) {
-        const hours = (parseInt(match[1]) || 0);
-        const minutes = (parseInt(match[2]) || 0);
-        const seconds = (parseInt(match[3]) || 0);
-
-        return hours * 3600 + minutes * 60 + seconds;
-    } else {
-        return 0;
     }
 }
 // 随机选择视频
@@ -407,83 +397,93 @@ const truncateNovel = async () => {
 </script>
 
 <template>
-    <div :style="{ backgroundColor: 'pink' }">
-        <input v-model="fqNovelBookIdInput"></input>
-        <button @click="fetchfqNovelContent">确定</button>
-    </div>
-    <VueDraggable v-model="novels" target=".sort-target" :animation="150">
-        <table>
-            <thead>
-                <tr>
-                    <th><textarea v-model="novelContentInput"></textarea></th>
-                    <th><button @click="addNovel">添加</button></th>
-                    <th><button @click="generateAudio">一键生成语音</button></th>
-                    <th><button @click="truncateNovel">清空表</button></th>
-                </tr>
-                <tr>
-                    <th>id</th>
-                    <th>内容</th>
-                    <th>音频源</th>
-                    <th>音频时长</th>
-                    <th>音频</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody class="sort-target">
-                <tr v-for="novel in novels" :key="novel.id" class="cursor-move">
-                    <td>{{ novel.id }}</td>
-                    <td>{{ novel.content }}</td>
-                    <td>{{ novel.audioSrc }}</td>
-                    <td>{{ novel.audioDuration }}</td>
-                    <td><audio @loadedmetadata="setAudioDuration(novel.id!, $event)" :src="novel.audioSrc"
-                            controls></audio></td>
-                    <td>
-                        <div style="display: flex;">
-                            <button @click="deleteNovel(novel.id!)">删除</button>
-                            <button @click="generateAudioByIndex(novel.id!)">生成语音</button>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </VueDraggable>
-
-
-    <div :style="{ backgroundColor: 'gray' }">
-        <div>
-            <button @click="startGptsovitsDocker">开启gpt-sovits</button>
-            <button @click="stopGptsovitsDocker">关闭gpt-sovits</button>
-        </div>
-        <selectFIle :buttonValue="'vits文件:'" :directory="gptsovitsModelPath" v-model="vitsFile" />
-        <selectFIle :buttonValue="'gpt文件:'" :directory="gptsovitsModelPath" v-model="gptFile" />
-        <button @click="setModel">设置模型</button>
-        <selectFIle :buttonValue="'参考音频:'" :directory="gptsovitsModelPath" v-model="promptAudio" />
-    </div>
-
-    <div :style="{ backgroundColor: 'gray' }">
-        <div class="info">
-            <p>音频长度:{{ audioTotaDuration }}</p>
-            <p>视频总长度:{{ videoTotalDuration }}</p>
-            <p>选择的博主id:{{ channelId }}</p>
-        </div>
-        <div class="controls">
-            <p>选择博主视频主页:<input @keyup.enter="toggleYoutubeUrl" type="text" id="youtubeUrlInput" v-model="youtubeUrl">
-            </p>
-            <p>选择随机视频数量:<input type="number" id="randomVideoCountInput" v-model="randomVideoCount"></p>
-            <p>请输入音频地址，按回车键下载:<input v-model="bgminput" @keyup.enter="onEnter"></input></p>
-            <button @click="showVideo">展示视频</button>
-            <button @click="downloadVideos">下载视频</button>
-        </div>
-        <div>
-            <a :style="{ display: 'block' }" v-for="(video, index) in selectedVideos" :key="index" :href="video.url"
-                @contextmenu.prevent="removeVideo(index)">{{ video.id }} (时长：{{ video.duration }})</a>
-        </div>
-    </div>
 
     <div>
-        <button @click="generateVideo()">合成视频</button>
-    </div>
+        <ElTabs>
+            <ElTabPane label="novel">
+                <div :style="{ backgroundColor: 'pink' }">
+                    <input v-model="fqNovelBookIdInput"></input>
+                    <button @click="fetchfqNovelContent">确定</button>
+                </div>
+                <VueDraggable v-model="novels" target=".sort-target" :animation="150">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th><textarea v-model="novelContentInput"></textarea></th>
+                                <th><button @click="addNovel">添加</button></th>
+                                <th><button @click="generateAudio">一键生成语音</button></th>
+                                <th><button @click="truncateNovel">清空表</button></th>
+                            </tr>
+                            <tr>
+                                <th>id</th>
+                                <th>内容</th>
+                                <th>音频源</th>
+                                <th>音频时长</th>
+                                <th>音频</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="sort-target">
+                            <tr v-for="novel in novels" :key="novel.id" class="cursor-move">
+                                <td>{{ novel.id }}</td>
+                                <td>{{ novel.content }}</td>
+                                <td>{{ novel.audioSrc }}</td>
+                                <td>{{ novel.audioDuration }}</td>
+                                <td><audio @loadedmetadata="setAudioDuration(novel.id!, $event)" :src="novel.audioSrc"
+                                        controls></audio>
+                                </td>
+                                <td>
+                                    <div style="display: flex;">
+                                        <button @click="deleteNovel(novel.id!)">删除</button>
+                                        <button @click="generateAudioByIndex(novel.id!)">生成语音</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </VueDraggable>
+            </ElTabPane>
+            <ElTabPane label="gpt-sovits">
+                <div>
+                    <div>
+                        <button @click="startGptsovitsDocker">开启gpt-sovits</button>
+                        <button @click="stopGptsovitsDocker">关闭gpt-sovits</button>
+                    </div>
+                    <selectFIle :buttonValue="'vits文件:'" :directory="gptsovitsModelPath" v-model="vitsFile" />
+                    <selectFIle :buttonValue="'gpt文件:'" :directory="gptsovitsModelPath" v-model="gptFile" />
+                    <button @click="setModel">设置模型</button>
+                    <selectFIle :buttonValue="'参考音频:'" :directory="gptsovitsModelPath" v-model="promptAudio" />
+                </div>
+            </ElTabPane>
+            <ElTabPane label="视频下载">
+                <div>
+                    <div class="info">
+                        <p>音频长度:{{ audioTotaDuration }}</p>
+                        <p>视频总长度:{{ videoTotalDuration }}</p>
+                        <p>选择的博主id:{{ channelId }}</p>
+                    </div>
+                    <div class="controls">
+                        <p>选择博主视频主页:<input @keyup.enter="toggleYoutubeUrl" type="text" id="youtubeUrlInput"
+                                v-model="youtubeUrl">
+                        </p>
+                        <p>选择随机视频数量:<input type="number" id="randomVideoCountInput" v-model="randomVideoCount"></p>
+                        <p>请输入音频地址，按回车键下载:<input v-model="bgminput" @keyup.enter="onEnter"></input></p>
+                        <button @click="showVideo">展示视频</button>
+                        <button @click="downloadVideos">下载视频</button>
+                    </div>
+                    <div>
+                        <a :style="{ display: 'block' }" v-for="(video, index) in selectedVideos" :key="index"
+                            :href="video.url" @contextmenu.prevent="removeVideo(index)">{{ video.id }} (时长：{{
+                                video.duration }})</a>
+                    </div>
+                </div>
 
+                <div>
+                    <button @click="generateVideo()">合成视频</button>
+                </div>
+            </ElTabPane>
+        </ElTabs>
+    </div>
 </template>
 
 <style scoped>
