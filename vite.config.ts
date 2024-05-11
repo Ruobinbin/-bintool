@@ -19,15 +19,7 @@ export default defineConfig(({ command }) => {
       vue(),
       electron({
         main: {
-          // 'build.lib.entry' 的快捷方式
           entry: 'electron/main/index.ts',
-          onstart({ startup }) {
-            if (process.env.VSCODE_DEBUG) {
-              console.log(/* 为 `.vscode/.debug.script.mjs` */'[startup] Electron App')
-            } else {
-              startup()
-            }
-          },
           vite: {
             build: {
               sourcemap,
@@ -44,8 +36,6 @@ export default defineConfig(({ command }) => {
           },
         },
         preload: {
-          // 'build.rollupOptions.input' 的快捷方式。
-          // 预加载脚本可能包含 Web 资源，所以使用 'build.rollupOptions.input' 而不是 'build.lib.entry'。
           input: 'electron/preload/index.ts',
           vite: {
             build: {
@@ -64,13 +54,6 @@ export default defineConfig(({ command }) => {
         renderer: {},
       }),
     ],
-    server: process.env.VSCODE_DEBUG && (() => {
-      const url = new URL(pkg.debug.env.VITE_DEV_SERVER_URL)
-      return {
-        host: url.hostname,
-        port: +url.port,
-      }
-    })(),
     clearScreen: false,
     build: {
       rollupOptions: {
